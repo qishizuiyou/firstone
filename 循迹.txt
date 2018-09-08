@@ -1,0 +1,142 @@
+# -*- coding: utf-8 -*-
+try:
+    import vrep
+except:
+    print('--------------------------------------------------------------')
+    print('"vrep.py" could not be imported. This means very probably that')
+    print('either "vrep.py" or the remoteApi library could not be found.')
+    print('Make sure both are in the same folder as this file,')
+    print('or appropriately adjust the file "vrep.py"')
+    print('--------------------------------------------------------------')
+    print('')
+
+import time
+import sys
+import ctypes
+
+print('Program started')
+vrep.simxFinish(-1)
+clientID = vrep.simxStart('127.0.0.1', 19997, True, True, 5000, 5)
+
+if clientID != -1:
+    print('Connected to remote API server')
+else:
+    print('Failed connecting to remote API server')
+    sys.exit('Program Ended')
+
+nominalLinearVelocity = 0.3
+wheelRadius = 0.027
+interWheelDistance = 0.119
+
+res, objs = vrep.simxGetObjects(clientID, vrep.sim_handle_all, vrep.simx_opmode_blocking)
+if res == vrep.simx_return_ok:
+    print('Number of objects in the scene: ', len(objs))
+else:
+    print('Remote API function call returned with error code: ', res)
+
+time.sleep(2)
+
+startTime = time.time()
+vrep.simxGetIntegerParameter(clientID, vrep.sim_intparam_mouse_x, vrep.simx_opmode_streaming)
+
+# Get obejects.
+res, display = vrep.simxGetUIHandle(clientID, "sensorDisplay", vrep.simx_opmode_blocking)
+res, line_sensor0 = vrep.simxGetObjectHandle(clientID, "line_sensor0", vrep.simx_opmode_blocking)
+res, line_sensor1 = vrep.simxGetObjectHandle(clientID, "line_sensor1", vrep.simx_opmode_blocking)
+res, line_sensor2 = vrep.simxGetObjectHandle(clientID, "line_sensor2 ", vrep.simx_opmode_blocking)
+res, line_sensor3 = vrep.simxGetObjectHandle(clientID, "line_sensor3", vrep.simx_opmode_blocking)
+res, line_sensor4 = vrep.simxGetObjectHandle(clientID, "line_sensor4", vrep.simx_opmode_blocking)
+res, line_sensor5 = vrep.simxGetObjectHandle(clientID, "line_sensor5 ", vrep.simx_opmode_blocking)
+res, left_joint= vrep.simxGetObjectHandle(clientID, "left_joint", vrep.simx_opmode_blocking)  # Left wheel
+res, right_joint = vrep.simxGetObjectHandle(clientID, "right_joint", vrep.simx_opmode_blocking)  # Right wheel
+
+if res != vrep.simx_return_ok:
+    print('Failed to get sensor Handler')
+    vrep.simxFinish(clientID)
+    sys.exit('Program ended')
+
+
+# Update the sensor display.
+def setLeds(elHandle, sensor0,sensor1,sensor2,sensor3,sensor4,sensor5):
+    # Initialize display at first.
+    vrep.simxSetUIButtonProperty(clientID, elHandle, 8, vrep.sim_buttonproperty_staydown, vrep.simx_opmode_oneshot)
+    vrep.simxSetUIButtonProperty(clientID, elHandle, 16, vrep.sim_buttonproperty_staydown, vrep.simx_opmode_oneshot)
+    vrep.simxSetUIButtonProperty(clientID, elHandle, 24, vrep.sim_buttonproperty_staydown, vrep.simx_opmode_oneshot)
+    vrep.simxSetUIButtonProperty(clientID, elHandle, 32, vrep.sim_buttonproperty_staydown, vrep.simx_opmode_oneshot)
+    vrep.simxSetUIButtonProperty(clientID, elHandle, 40, vrep.sim_buttonproperty_staydown, vrep.simx_opmode_oneshot)
+    vrep.simxSetUIButtonProperty(clientID, elHandle, 48, vrep.sim_buttonproperty_staydown, vrep.simx_opmode_oneshot)
+
+    # Set LEDs of the display if sensors don't catch the line.
+    if sensor0:
+        vrep.simxSetUIButtonProperty(clientID, elHandle, 8,
+                                     vrep.sim_buttonproperty_staydown + vrep.sim_buttonproperty_isdown,
+                                     vrep.simx_opmode_oneshot)
+    if sensor1:
+        vrep.simxSetUIButtonProperty(clientID, elHandle, 16,
+                                     vrep.sim_buttonproperty_staydown + vrep.sim_buttonproperty_isdown,
+                                     vrep.simx_opmode_oneshot)
+    if sensor2:
+        vrep.simxSetUIButtonProperty(clientID, elHandle, 24,
+                                     vrep.sim_buttonproperty_staydown + vrep.sim_buttonproperty_isdown,
+                                     vrep.simx_opmode_oneshot)
+    if sensor3:
+        vrep.simxSetUIButtonProperty(clientID, elHandle, 32,
+                                     vrep.sim_buttonproperty_staydown + vrep.sim_buttonproperty_isdown,
+                                     vrep.simx_opmode_oneshot)
+    if sensor4:
+        vrep.simxSetUIButtonProperty(clientID, elHandle, 40,
+                                     vrep.sim_buttonproperty_staydown + vrep.sim_buttonproperty_isdown,
+                                     vrep.simx_opmode_oneshot)
+    if sensor5:
+        vrep.simxSetUIButtonProperty(clientID, elHandle, 48,
+                                     vrep.sim_buttonproperty_staydown + vrep.sim_buttonproperty_isdown,
+                                     vrep.simx_opmode_oneshot)
+
+
+# Initialize sensors
+sensorReading = [False, False, False,False, False, False]  # Left, Middle, Right
+sensorReading[0] = (vrep.simxReadVisionSensor(clientID, line_sensor0, vrep.simx_opmode_streaming) == 1)
+sensorReading[1] = (vrep.simxReadVisionSensor(clientID, line_sensor1, vrep.simx_opmode_streaming) == 1)
+sensorReading[2] = (vrep.simxReadVisionSensor(clientID, line_sensor2, vrep.simx_opmode_streaming) == 1)
+sensorReading[3] = (vrep.simxReadVisionSensor(clientID, line_sensor3, vrep.simx_opmode_streaming) == 1)
+sensorReading[4] = (vrep.simxReadVisionSensor(clientID, line_sensor4, vrep.simx_opmode_streaming) == 1)
+sensorReading[5] = (vrep.simxReadVisionSensor(clientID, line_sensor5, vrep.simx_opmode_streaming) == 1)
+
+while time.time() - startTime < 50:
+    # Try to retrieve the streamed data.
+    returnCode, data = vrep.simxGetIntegerParameter(clientID, vrep.sim_intparam_mouse_x, vrep.simx_opmode_buffer)
+
+    # Read the sensors
+    sensorReading[0] = (vrep.simxReadVisionSensor(clientID,  line_sensor0, vrep.simx_opmode_buffer)[1])
+    sensorReading[1] = (vrep.simxReadVisionSensor(clientID,  line_sensor1, vrep.simx_opmode_buffer)[1])
+    sensorReading[2] = (vrep.simxReadVisionSensor(clientID,  line_sensor2, vrep.simx_opmode_buffer)[1])
+    sensorReading[3] = (vrep.simxReadVisionSensor(clientID,  line_sensor3, vrep.simx_opmode_buffer)[1])
+    sensorReading[4] = (vrep.simxReadVisionSensor(clientID,  line_sensor4, vrep.simx_opmode_buffer)[1])
+    sensorReading[5] = (vrep.simxReadVisionSensor(clientID,  line_sensor5, vrep.simx_opmode_buffer)[1])
+
+    # Update the sensor display
+    setLeds(display, sensorReading[0], sensorReading[1], sensorReading[2],sensorReading[3], sensorReading[4], sensorReading[5])
+
+    # Decide about both left and right velocities.
+    s = 1.0
+    linearVelocityLeft = nominalLinearVelocity * s
+    linearVelocityRight = nominalLinearVelocity * s
+
+    # Trun left a little if the left sensor catches line(False), and vice versa.
+
+    if not sensorReading[4]:
+        linearVelocityLeft = linearVelocityLeft * 0.3
+    if not sensorReading[1]:
+        linearVelocityRight = linearVelocityRight * 0.3
+
+        # Update both left and right velocities.
+    vrep.simxSetJointTargetVelocity(clientID, left_joint, linearVelocityLeft / (s * wheelRadius),
+                                    vrep.simx_opmode_oneshot)
+    vrep.simxSetJointTargetVelocity(clientID, right_joint, linearVelocityRight / (s * wheelRadius),
+                                    vrep.simx_opmode_oneshot)
+
+    time.sleep(0.005)
+
+# Stop the line tracer.
+vrep.simxSetJointTargetVelocity(clientID, left_joint, 0.0, vrep.simx_opmode_blocking)
+vrep.simxSetJointTargetVelocity(clientID, right_joint, 0.0, vrep.simx_opmode_blocking)
